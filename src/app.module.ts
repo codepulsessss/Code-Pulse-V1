@@ -7,7 +7,7 @@ import { AppService } from './app.service.js';
 import { envValidationSchema } from './config/env.validation.js';
 import { AuthModule } from './auth/auth.module.js';
 import { GithubModule } from './github/github.module.js';
-import { CodeReviewModule } from './code-review/code-review.module.js';
+import { AnalysisModule } from './analysis/analysis.module.js';
 import { RepoRagModule } from './repo-rag/repo-rag.module.js';
 
 @Module({
@@ -26,7 +26,7 @@ import { RepoRagModule } from './repo-rag/repo-rag.module.js';
     AuthModule,
     GithubModule,
     RepoRagModule,
-    CodeReviewModule,
+    AnalysisModule,
   ],
   controllers: [AppController],
   providers: [AppService],

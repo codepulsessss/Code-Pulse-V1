@@ -1,7 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import type { PRFile } from '../../code-review/langgraph/state.js';
+import type { ChangedFile } from '../../analysis/langgraph/state.js';
 import { chunkFile } from '../chunking/chunk-file.js';
 import {
   extractImportPaths,
@@ -26,13 +26,13 @@ import {
   mergeByFixedPriority,
 } from './context-assembler.js';
 
-const LOG_PREFIX = '[code-review]';
+const LOG_PREFIX = '[analysis]';
 
 export interface RetrievalInput {
   owner: string;
   repo: string;
   baseBranch: string;
-  files: PRFile[];
+  files: ChangedFile[];
 }
 
 @Injectable()
@@ -49,7 +49,8 @@ export class RetrieverService {
     if (!record || record.status !== 'ready') {
       throw new ConflictException({
         message: 'Repository branch is not indexed for retrieval',
-        indexUrl: `/api/v1/repo-index/repositories/${owner}/${repo}/branches/${branch}/index`,
+        indexUrl: `/api/v1/repo-index/connect`,
+        hint: 'POST { workspace: "owner/repo", branch } to index and register a webhook',
         status: record?.status ?? 'missing',
       });
     }
@@ -151,7 +152,7 @@ export class RetrieverService {
   private async retrieveImportGraph(
     repoId: string,
     branch: string,
-    files: PRFile[],
+    files: ChangedFile[],
     changedSet: Set<string>,
   ): Promise<RetrievedChunk[]> {
     const results: RetrievedChunk[] = [];
@@ -189,7 +190,7 @@ export class RetrieverService {
   private async retrievePathTests(
     repoId: string,
     branch: string,
-    files: PRFile[],
+    files: ChangedFile[],
     changedSet: Set<string>,
   ): Promise<RetrievedChunk[]> {
     const results: RetrievedChunk[] = [];
@@ -218,7 +219,7 @@ export class RetrieverService {
   private async retrievePathSiblings(
     repoId: string,
     branch: string,
-    files: PRFile[],
+    files: ChangedFile[],
     changedSet: Set<string>,
   ): Promise<RetrievedChunk[]> {
     const results: RetrievedChunk[] = [];

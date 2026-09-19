@@ -1,6 +1,6 @@
 import type { DomainKey, DomainReport, Finding, GraphState } from '../state.js';
 
-const LOG_PREFIX = '[code-review]';
+const LOG_PREFIX = '[analysis]';
 
 export const SHARED_REVIEW_RULES = `
 Rules:

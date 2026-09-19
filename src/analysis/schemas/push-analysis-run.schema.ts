@@ -1,16 +1,17 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
-export const CODE_REVIEW_RUN_STATUSES = [
+export const PUSH_ANALYSIS_RUN_STATUSES = [
   'running',
   'completed',
   'failed',
 ] as const;
 
-export type CodeReviewRunStatus = (typeof CODE_REVIEW_RUN_STATUSES)[number];
+export type PushAnalysisRunStatus =
+  (typeof PUSH_ANALYSIS_RUN_STATUSES)[number];
 
-@Schema({ timestamps: true, collection: 'CodeReviewRuns' })
-export class CodeReviewRun {
+@Schema({ timestamps: true, collection: 'PushAnalysisRuns' })
+export class PushAnalysisRun {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true, index: true })
   userId!: Types.ObjectId;
 
@@ -20,20 +21,21 @@ export class CodeReviewRun {
   @Prop({ required: true, trim: true, index: true })
   repo!: string;
 
-  @Prop({ required: true, index: true })
-  pullNumber!: number;
+  @Prop({ required: true, trim: true, index: true })
+  branch!: string;
 
   @Prop({ required: true, trim: true })
-  baseSha!: string;
+  beforeSha!: string;
 
   @Prop({ required: true, trim: true })
-  headSha!: string;
+  afterSha!: string;
 
-  @Prop({ required: true, trim: true })
-  baseBranch!: string;
-
-  @Prop({ required: true, enum: CODE_REVIEW_RUN_STATUSES, default: 'running' })
-  status!: CodeReviewRunStatus;
+  @Prop({
+    required: true,
+    enum: PUSH_ANALYSIS_RUN_STATUSES,
+    default: 'running',
+  })
+  status!: PushAnalysisRunStatus;
 
   @Prop({ type: MongooseSchema.Types.Mixed })
   finalReport?: Record<string, unknown>;
@@ -42,13 +44,14 @@ export class CodeReviewRun {
   error?: string;
 }
 
-export type CodeReviewRunDocument = HydratedDocument<CodeReviewRun>;
-export const CodeReviewRunSchema = SchemaFactory.createForClass(CodeReviewRun);
+export type PushAnalysisRunDocument = HydratedDocument<PushAnalysisRun>;
+export const PushAnalysisRunSchema =
+  SchemaFactory.createForClass(PushAnalysisRun);
 
-CodeReviewRunSchema.index({
+PushAnalysisRunSchema.index({
   userId: 1,
   owner: 1,
   repo: 1,
-  pullNumber: 1,
+  branch: 1,
   createdAt: -1,
 });

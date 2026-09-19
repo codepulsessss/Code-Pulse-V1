@@ -60,7 +60,7 @@ export function formatRelatedContext(chunks: RetrievedChunk[]): string {
     .join('\n\n');
 
   return `RELATED CODEBASE CONTEXT
-(Repository code outside this PR that may be affected)
+(Repository code outside this changeset that may be affected)
 
 ${body}`;
 }

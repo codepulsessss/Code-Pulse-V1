@@ -10,7 +10,7 @@ import {
   parseStrictJson,
 } from './domain-review.util.js';
 
-export const securityReviewerNode = async (
+export const performanceReviewerNode = async (
   state: GraphState,
 ): Promise<Partial<GraphState>> => {
   const model = createGemini();
@@ -18,21 +18,21 @@ export const securityReviewerNode = async (
   const relatedContext = buildRelatedContextBlock(state);
 
   const prompt = `
-You are a senior application security engineer doing a PR review focused on SECURITY.
+You are a senior software engineer reviewing a pushed changeset focused on PERFORMANCE.
 
 Focus areas:
-- authentication/authorization issues
-- injection risks (SQL/NoSQL/command/path)
-- secrets leakage, token handling, logging sensitive data
-- SSRF, unsafe redirects, unsafe deserialization
-- insecure defaults and missing validation
+- slow loops, unnecessary work, excessive allocations
+- N+1 query patterns / inefficient DB usage
+- expensive synchronous operations on request paths
+- missing pagination/caching opportunities
+- algorithmic complexity regressions
 
 Analyze the following changes and return STRICT JSON only (no markdown/backticks/explanations).
 
-PR TITLE:
+CHANGESET TITLE:
 ${state.cleanedInput?.title ?? ''}
 
-PR DESCRIPTION:
+CHANGESET DESCRIPTION:
 ${state.cleanedInput?.description ?? ''}
 
 FILES:
@@ -59,22 +59,22 @@ Return ONLY this JSON structure:
   const raw = extractModelTextContent(response);
   const parsed = parseStrictJson(raw, {
     rating: 3,
-    summary: 'Security review completed.',
+    summary: 'Performance review completed.',
     weakAreas: [],
     findings: [],
   });
 
   const report: DomainReport = buildDomainReport({
-    domain: 'security',
+    domain: 'performance',
     parsed,
-    fallbackSummary: 'Security review completed.',
+    fallbackSummary: 'Performance review completed.',
   });
 
-  logDomainComplete('security', report);
+  logDomainComplete('performance', report);
 
   return {
     domainReports: {
-      security: report,
+      performance: report,
     },
   };
 };

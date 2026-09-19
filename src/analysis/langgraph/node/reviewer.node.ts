@@ -10,7 +10,7 @@ import {
   parseStrictJson,
 } from './domain-review.util.js';
 
-const LOG_PREFIX = '[code-review]';
+const LOG_PREFIX = '[analysis]';
 
 /**
  * Bug detection pass — runs after parallel domain reviews and joinNode shaping.
@@ -26,7 +26,7 @@ export const bugDetectionReviewerNode = async (
     return {};
   }
 
-  console.log(`${LOG_PREFIX} bugDetection node: invoking LLM for PR #${state.input.prId}`);
+  console.log(`${LOG_PREFIX} bugDetection node: invoking LLM for ${state.input.branch}@${state.input.afterSha?.slice(0, 7)}`);
 
   const model = createGemini();
   const filesText = buildFilesPromptSection(state);
@@ -34,17 +34,17 @@ export const bugDetectionReviewerNode = async (
   const addendum = state.bugDetectionPromptAddendum?.trim();
 
   const prompt = `
-You are a senior software engineer doing BUG DETECTION in a PR review.
+You are a senior software engineer doing BUG DETECTION in a pushed changeset.
 
 Goal: find correctness bugs, edge-case failures, hidden regressions, and logic mistakes.
 
 ${addendum ? `EXTRA FOCUS (derived from other domain reviews):\n${addendum}\n` : ''}
 Analyze the following changes and return STRICT JSON only (no markdown/backticks/explanations).
 
-PR TITLE:
+CHANGESET TITLE:
 ${state.cleanedInput?.title ?? ''}
 
-PR DESCRIPTION:
+CHANGESET DESCRIPTION:
 ${state.cleanedInput?.description ?? ''}
 
 FILES:
@@ -92,5 +92,3 @@ Return ONLY this JSON structure:
   };
 };
 
-/** @deprecated Use bugDetectionReviewerNode */
-export const reviewerNode = bugDetectionReviewerNode;

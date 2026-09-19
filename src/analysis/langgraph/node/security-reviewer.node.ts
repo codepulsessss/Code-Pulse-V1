@@ -10,7 +10,7 @@ import {
   parseStrictJson,
 } from './domain-review.util.js';
 
-export const qualityReviewerNode = async (
+export const securityReviewerNode = async (
   state: GraphState,
 ): Promise<Partial<GraphState>> => {
   const model = createGemini();
@@ -18,20 +18,21 @@ export const qualityReviewerNode = async (
   const relatedContext = buildRelatedContextBlock(state);
 
   const prompt = `
-You are a senior software engineer doing a PR review focused on CODE QUALITY.
+You are a senior application security engineer reviewing a pushed changeset focused on SECURITY.
 
 Focus areas:
-- readability, naming, maintainability
-- error handling and edge cases
-- correctness risks and confusing logic
-- API design clarity and consistency
+- authentication/authorization issues
+- injection risks (SQL/NoSQL/command/path)
+- secrets leakage, token handling, logging sensitive data
+- SSRF, unsafe redirects, unsafe deserialization
+- insecure defaults and missing validation
 
 Analyze the following changes and return STRICT JSON only (no markdown/backticks/explanations).
 
-PR TITLE:
+CHANGESET TITLE:
 ${state.cleanedInput?.title ?? ''}
 
-PR DESCRIPTION:
+CHANGESET DESCRIPTION:
 ${state.cleanedInput?.description ?? ''}
 
 FILES:
@@ -58,22 +59,22 @@ Return ONLY this JSON structure:
   const raw = extractModelTextContent(response);
   const parsed = parseStrictJson(raw, {
     rating: 3,
-    summary: 'Code quality review completed.',
+    summary: 'Security review completed.',
     weakAreas: [],
     findings: [],
   });
 
   const report: DomainReport = buildDomainReport({
-    domain: 'quality',
+    domain: 'security',
     parsed,
-    fallbackSummary: 'Code quality review completed.',
+    fallbackSummary: 'Security review completed.',
   });
 
-  logDomainComplete('quality', report);
+  logDomainComplete('security', report);
 
   return {
     domainReports: {
-      quality: report,
+      security: report,
     },
   };
 };

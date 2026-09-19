@@ -12,13 +12,24 @@ import { AuthService } from '../auth/auth.service.js';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type.js';
 import { TokenEncryptionService } from '../common/services/token-encryption.service.js';
 import { decodeGithubRepositoryFileContentIfApplicable } from './github.helpers.js';
+import {
+  toSlimBranch,
+  toSlimProfile,
+  toSlimRepository,
+} from './github.mappers.js';
 import type {
+  GithubBranchRaw,
+  GithubCompareResponse,
   GithubOauthState,
   GithubPushWebhookPayload,
+  GithubRepoRaw,
   GithubTreeEntry,
   GithubWebhook,
   GithubUserEmail,
   GithubUserProfile,
+  SlimGithubBranch,
+  SlimGithubProfile,
+  SlimGithubRepository,
 } from './github.types.js';
 
 @Injectable()
@@ -91,126 +102,52 @@ export class GithubService {
     });
   }
 
-  // --- REST (GitHub API v3) — authenticated per app user ---
+  // --- Client-facing (slim responses) ---
 
-  async getAuthenticatedGithubProfile(user: AuthenticatedUser) {
+  async getAuthenticatedGithubProfile(
+    user: AuthenticatedUser,
+  ): Promise<SlimGithubProfile> {
     const token = await this.getDecryptedAccessToken(user.userId);
-    return this.fetchGithubUser(token);
+    const profile = await this.fetchGithubUser(token);
+    return toSlimProfile(profile);
   }
 
-  async listRepositories(user: AuthenticatedUser, page = 1, perPage = 20) {
-    return this.githubRequest(
+  async listRepositories(
+    user: AuthenticatedUser,
+    page = 1,
+    perPage = 20,
+  ): Promise<{ items: SlimGithubRepository[]; page: number; perPage: number }> {
+    const repos = await this.githubRequest<GithubRepoRaw[]>(
       user.userId,
       `/user/repos?sort=updated&direction=desc&page=${page}&per_page=${perPage}`,
     );
+    return {
+      items: (repos ?? []).map(toSlimRepository),
+      page,
+      perPage,
+    };
   }
 
-  async listPullRequests(
+  async listBranches(
     user: AuthenticatedUser,
     owner: string,
     repo: string,
-    state = 'open',
-  ) {
-    return this.githubRequest(
+    page = 1,
+    perPage = 100,
+  ): Promise<{ items: SlimGithubBranch[]; page: number; perPage: number }> {
+    const branches = await this.githubRequest<GithubBranchRaw[]>(
       user.userId,
-      `/repos/${owner}/${repo}/pulls?state=${encodeURIComponent(state)}`,
+      `/repos/${owner}/${repo}/branches?page=${page}&per_page=${perPage}`,
     );
+    return {
+      items: (branches ?? []).map(toSlimBranch),
+      page,
+      perPage,
+    };
   }
 
-  async getPullRequest(
-    user: AuthenticatedUser,
-    owner: string,
-    repo: string,
-    pullNumber: number,
-  ) {
-    return this.githubRequest(
-      user.userId,
-      `/repos/${owner}/${repo}/pulls/${pullNumber}`,
-    );
-  }
+  // --- Internal REST (used by indexing + analysis; not exposed publicly) ---
 
-  async listPullRequestFiles(
-    user: AuthenticatedUser,
-    owner: string,
-    repo: string,
-    pullNumber: number,
-  ) {
-    return this.githubRequest(
-      user.userId,
-      `/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
-    );
-  }
-
-  async listCommits(
-    user: AuthenticatedUser,
-    owner: string,
-    repo: string,
-    branch?: string,
-  ) {
-    const search = new URLSearchParams();
-    if (branch) {
-      search.set('sha', branch);
-    }
-    const suffix = search.toString() ? `?${search.toString()}` : '';
-    return this.githubRequest(
-      user.userId,
-      `/repos/${owner}/${repo}/commits${suffix}`,
-    );
-  }
-
-  async compareCommits(
-    user: AuthenticatedUser,
-    owner: string,
-    repo: string,
-    base: string,
-    head: string,
-  ) {
-    return this.githubRequest(
-      user.userId,
-      `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
-    );
-  }
-
-  async getDiff(
-    user: AuthenticatedUser,
-    owner: string,
-    repo: string,
-    base: string,
-    head: string,
-  ) {
-    return this.githubRequest(
-      user.userId,
-      `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
-      {
-        accept: 'application/vnd.github.diff',
-      },
-      false,
-    );
-  }
-
-  /**
-   * Lists files and subdirectories at the repo root or under `path` (GitHub contents API).
-   * Omit `path` or pass empty string for the repository root.
-   */
-  async listRepositoryContents(
-    user: AuthenticatedUser,
-    owner: string,
-    repo: string,
-    path?: string,
-    ref?: string,
-  ) {
-    const data = await this.githubRequest(
-      user.userId,
-      this.buildContentsApiPath(owner, repo, path, ref),
-    );
-    return decodeGithubRepositoryFileContentIfApplicable(data);
-  }
-
-  /**
-   * Single file or symlink metadata + content (GitHub "contents" API).
-   * File bodies are returned as UTF-8 text in `content` (GitHub sends base64; we decode).
-   * For directories GitHub returns an array of entries instead.
-   */
   async getRepositoryFile(
     user: AuthenticatedUser,
     owner: string,
@@ -297,6 +234,29 @@ export class GithubService {
       this.buildContentsApiPath(owner, repo, normalized, ref),
     );
     return decodeGithubRepositoryFileContentIfApplicable(data);
+  }
+
+  async compareCommits(
+    user: AuthenticatedUser,
+    owner: string,
+    repo: string,
+    base: string,
+    head: string,
+  ): Promise<GithubCompareResponse> {
+    return this.compareCommitsForUserId(user.userId, owner, repo, base, head);
+  }
+
+  async compareCommitsForUserId(
+    userId: string,
+    owner: string,
+    repo: string,
+    base: string,
+    head: string,
+  ): Promise<GithubCompareResponse> {
+    return this.githubRequestForUserId<GithubCompareResponse>(
+      userId,
+      `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+    );
   }
 
   async listRepositoryWebhooks(
@@ -508,7 +468,9 @@ export class GithubService {
 
     if (!response.ok || !payload.access_token) {
       throw new UnauthorizedException(
-        payload.error_description ?? payload.error ?? 'GitHub token exchange failed',
+        payload.error_description ??
+          payload.error ??
+          'GitHub token exchange failed',
       );
     }
 
@@ -527,9 +489,7 @@ export class GithubService {
     profile: GithubUserProfile,
     emails: GithubUserEmail[],
   ) {
-    const primaryVerifiedEmail = emails.find(
-      (e) => e.primary && e.verified,
-    );
+    const primaryVerifiedEmail = emails.find((e) => e.primary && e.verified);
     const fallbackVerifiedEmail = emails.find((e) => e.verified);
 
     return (
@@ -574,7 +534,7 @@ export class GithubService {
       headers: {
         Accept: init?.accept ?? 'application/vnd.github+json',
         Authorization: `Bearer ${accessToken}`,
-        'User-Agent': 'pre-cision-backend',
+        'User-Agent': 'codepulse-backend',
         'X-GitHub-Api-Version': '2022-11-28',
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,

@@ -10,7 +10,7 @@ import {
   parseStrictJson,
 } from './domain-review.util.js';
 
-export const performanceReviewerNode = async (
+export const qualityReviewerNode = async (
   state: GraphState,
 ): Promise<Partial<GraphState>> => {
   const model = createGemini();
@@ -18,21 +18,20 @@ export const performanceReviewerNode = async (
   const relatedContext = buildRelatedContextBlock(state);
 
   const prompt = `
-You are a senior software engineer doing a PR review focused on PERFORMANCE.
+You are a senior software engineer reviewing a pushed changeset focused on CODE QUALITY.
 
 Focus areas:
-- slow loops, unnecessary work, excessive allocations
-- N+1 query patterns / inefficient DB usage
-- expensive synchronous operations on request paths
-- missing pagination/caching opportunities
-- algorithmic complexity regressions
+- readability, naming, maintainability
+- error handling and edge cases
+- correctness risks and confusing logic
+- API design clarity and consistency
 
 Analyze the following changes and return STRICT JSON only (no markdown/backticks/explanations).
 
-PR TITLE:
+CHANGESET TITLE:
 ${state.cleanedInput?.title ?? ''}
 
-PR DESCRIPTION:
+CHANGESET DESCRIPTION:
 ${state.cleanedInput?.description ?? ''}
 
 FILES:
@@ -59,22 +58,22 @@ Return ONLY this JSON structure:
   const raw = extractModelTextContent(response);
   const parsed = parseStrictJson(raw, {
     rating: 3,
-    summary: 'Performance review completed.',
+    summary: 'Code quality review completed.',
     weakAreas: [],
     findings: [],
   });
 
   const report: DomainReport = buildDomainReport({
-    domain: 'performance',
+    domain: 'quality',
     parsed,
-    fallbackSummary: 'Performance review completed.',
+    fallbackSummary: 'Code quality review completed.',
   });
 
-  logDomainComplete('performance', report);
+  logDomainComplete('quality', report);
 
   return {
     domainReports: {
-      performance: report,
+      quality: report,
     },
   };
 };

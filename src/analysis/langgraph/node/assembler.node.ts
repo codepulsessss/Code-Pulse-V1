@@ -6,7 +6,7 @@ import {
   type GraphState,
 } from '../state.js';
 
-const LOG_PREFIX = '[code-review]';
+const LOG_PREFIX = '[analysis]';
 const MAX_FINDINGS = 20;
 const MAX_ISSUE_TOKENS = 4;
 
@@ -58,7 +58,7 @@ export const assemblerNode = async (state: GraphState): Promise<Partial<GraphSta
     `(high: ${severityCounts.high}, medium: ${severityCounts.medium}, low: ${severityCounts.low}).`;
 
   console.log(
-    `${LOG_PREFIX} assembler node: PR #${state.input.prId} ` +
+    `${LOG_PREFIX} assembler node: ${state.input.branch}@${state.input.afterSha?.slice(0, 7)} ` +
       `raw=${allFindings.length} unique=${postprocessed.length} ` +
       `domains=${JSON.stringify(domainCounts)}`,
   );
@@ -69,7 +69,11 @@ export const assemblerNode = async (state: GraphState): Promise<Partial<GraphSta
 
   return {
     finalReport: {
-      prId: state.input.prId,
+      owner: state.input.owner,
+      repo: state.input.repo,
+      branch: state.input.branch,
+      beforeSha: state.input.beforeSha,
+      afterSha: state.input.afterSha,
       overallSummary,
       summary: overallSummary,
       domainReports: reports,
@@ -79,7 +83,6 @@ export const assemblerNode = async (state: GraphState): Promise<Partial<GraphSta
         severity: severityCounts,
         domain: domainCounts,
       },
-      extraPromptApplied: state.input.extraPrompt ?? '',
       bugDetectionPromptAddendum: state.bugDetectionPromptAddendum ?? '',
       relatedContextCount,
       relatedContextPaths,

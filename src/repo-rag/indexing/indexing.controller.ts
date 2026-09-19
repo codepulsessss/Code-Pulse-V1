@@ -1,22 +1,57 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type.js';
-import { RegisterWebhookDto } from '../dto/register-webhook.dto.js';
+import { parseWorkspace } from '../../github/github.mappers.js';
+import { ConnectRepoDto } from '../dto/connect-repo.dto.js';
 import { IndexingService } from './indexing.service.js';
 
 @Controller('/api/v1/repo-index')
 export class IndexingController {
-  constructor(private readonly indexingService: IndexingService) {}
+  constructor(
+    private readonly indexingService: IndexingService,
+    private readonly config: ConfigService,
+  ) {}
 
+  /**
+   * Connect a workspace branch: build embeddings + register push webhook.
+   * Body: { workspace: "owner/repo", branch } (or owner + repo + branch)
+   */
   @UseGuards(JwtAuthGuard)
-  @Post('/repositories/:owner/:repo/branches/:branch/index')
-  async indexRepository(
+  @Post('/connect')
+  async connect(
     @Request() req: { user: AuthenticatedUser },
-    @Param('owner') owner: string,
-    @Param('repo') repo: string,
-    @Param('branch') branch: string,
+    @Body() body: ConnectRepoDto,
   ) {
-    return this.indexingService.runFullIndex(req.user, owner, repo, branch);
+    let owner: string;
+    let repo: string;
+    try {
+      ({ owner, repo } = parseWorkspace(body.workspace, body.owner, body.repo));
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid workspace',
+      );
+    }
+
+    const webhookUrl =
+      body.webhookUrl?.trim() ||
+      this.config.getOrThrow<string>('PUBLIC_WEBHOOK_URL');
+
+    return this.indexingService.connectWorkspace(req.user, {
+      owner,
+      repo,
+      branch: body.branch.trim(),
+      webhookUrl,
+    });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -27,23 +62,5 @@ export class IndexingController {
     @Param('branch') branch: string,
   ) {
     return this.indexingService.getStatus(owner, repo, branch);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('/repositories/:owner/:repo/branches/:branch/webhook')
-  async registerWebhook(
-    @Request() req: { user: AuthenticatedUser },
-    @Param('owner') owner: string,
-    @Param('repo') repo: string,
-    @Param('branch') branch: string,
-    @Body() body: RegisterWebhookDto,
-  ) {
-    return this.indexingService.registerBranchWebhook(
-      req.user,
-      owner,
-      repo,
-      branch,
-      body.url,
-    );
   }
 }

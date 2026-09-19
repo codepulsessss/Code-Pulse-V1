@@ -1,23 +1,21 @@
 import { Annotation } from '@langchain/langgraph';
 
-export interface PRFile {
+export interface ChangedFile {
   filename: string;
   patch: string;
   content: string;
   baseContent: string;
 }
 
-export interface PRAnalysisPayload {
-  prId: number;
+export interface PushAnalysisPayload {
   title: string;
   description?: string;
   owner: string;
   repo: string;
-  baseBranch: string;
-  baseSha: string;
-  headSha: string;
-  files: PRFile[];
-  extraPrompt?: string;
+  branch: string;
+  beforeSha: string;
+  afterSha: string;
+  files: ChangedFile[];
 }
 
 export interface RetrievedChunk {
@@ -57,8 +55,8 @@ export type DomainReport = {
 };
 
 export const GraphAnnotation = Annotation.Root({
-  input: Annotation<PRAnalysisPayload>(),
-  cleanedInput: Annotation<PRAnalysisPayload | undefined>(),
+  input: Annotation<PushAnalysisPayload>(),
+  cleanedInput: Annotation<PushAnalysisPayload | undefined>(),
   relatedContext: Annotation<RetrievedChunk[] | undefined>(),
   relatedContextFormatted: Annotation<string | undefined>(),
   findings: Annotation<Finding[] | undefined>(),

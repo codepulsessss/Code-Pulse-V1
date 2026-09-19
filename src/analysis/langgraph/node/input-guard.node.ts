@@ -1,6 +1,6 @@
 import { GraphState } from '../state.js';
 
-const LOG_PREFIX = '[code-review]';
+const LOG_PREFIX = '[analysis]';
 
 export const inputGuardNode = async (state: GraphState): Promise<GraphState> => {
   const cleanedFiles = state.input.files

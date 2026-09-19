@@ -429,7 +429,61 @@ export class IndexingService {
     };
   }
 
-  async handlePushWebhook(payload: GithubPushWebhookPayload) {
+  /**
+   * Connect a workspace branch: full embeddings index + push webhook registration.
+   */
+  async connectWorkspace(
+    user: AuthenticatedUser,
+    params: { owner: string; repo: string; branch: string; webhookUrl: string },
+  ) {
+    const { owner, repo, branch, webhookUrl } = params;
+    const workspace = `${owner}/${repo}`;
+
+    console.log(
+      `${LOG_PREFIX} connect started: ${workspace}@${branch}`,
+    );
+
+    const indexResult = await this.runFullIndex(user, owner, repo, branch);
+    const webhookResult = await this.registerBranchWebhook(
+      user,
+      owner,
+      repo,
+      branch,
+      webhookUrl,
+    );
+
+    return {
+      workspace,
+      owner,
+      repo,
+      branch,
+      indexStatus: indexResult.status,
+      indexedSha: indexResult.indexedSha,
+      fileCount: indexResult.fileCount,
+      chunkCount: indexResult.chunkCount,
+      webhookId: webhookResult.webhookId,
+      webhookUrl: webhookResult.webhookUrl,
+      message: webhookResult.created
+        ? 'Workspace connected: indexed and webhook registered'
+        : 'Workspace connected: indexed; webhook already present',
+    };
+  }
+
+  async handlePushWebhook(payload: GithubPushWebhookPayload): Promise<{
+    handled: boolean;
+    reason?: string;
+    changed?: number;
+    removed?: number;
+    analysis?: {
+      userId: string;
+      owner: string;
+      repo: string;
+      branch: string;
+      beforeSha: string;
+      afterSha: string;
+      payload: GithubPushWebhookPayload;
+    };
+  }> {
     const ref = payload.ref;
     const owner = payload.repository?.owner?.login;
     const repo = payload.repository?.name;
@@ -438,46 +492,18 @@ export class IndexingService {
       return { handled: false, reason: 'invalid-payload' };
     }
 
+    if (!ref.startsWith('refs/heads/')) {
+      return { handled: false, reason: 'not-a-branch-ref' };
+    }
+
     const branch = ref.replace('refs/heads/', '');
     const record = await this.repoIndexModel.findOne({ owner, repo, branch });
 
     if (!record) {
-      // Branch isn't indexed yet. Auto-enroll it, but only if it's an allowed
-      // review branch AND the repo was already connected by some user — the
-      // webhook itself carries no identity, so we reuse that user's token.
-      if (!this.isAllowedReviewBranch(branch)) {
-        console.log(
-          `${LOG_PREFIX} webhook push ignored (branch not in allowlist): ${owner}/${repo}@${branch}`,
-        );
-        return { handled: false, reason: 'branch-not-allowed' };
-      }
-
-      const repoRecord = await this.repoIndexModel.findOne({ owner, repo });
-      if (!repoRecord) {
-        console.log(
-          `${LOG_PREFIX} webhook push ignored (repo not connected): ${owner}/${repo}@${branch}`,
-        );
-        return { handled: false, reason: 'repo-not-connected' };
-      }
-
       console.log(
-        `${LOG_PREFIX} webhook push: auto-indexing new branch ${owner}/${repo}@${branch}`,
+        `${LOG_PREFIX} webhook push ignored (branch not connected): ${owner}/${repo}@${branch}`,
       );
-      // A full index can't be built from a push payload (it lists only changed
-      // files) and is slow — fire-and-forget so the webhook returns 200 fast.
-      void this.runFullIndexForUserId(
-        repoRecord.indexedByUserId,
-        owner,
-        repo,
-        branch,
-      ).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(
-          `${LOG_PREFIX} auto-index failed: ${owner}/${repo}@${branch} — ${message}`,
-        );
-      });
-
-      return { handled: true, action: 'full-index-started', branch };
+      return { handled: false, reason: 'branch-not-connected' };
     }
 
     const { changed, removed } =
@@ -485,7 +511,8 @@ export class IndexingService {
 
     console.log(
       `${LOG_PREFIX} webhook push: ${owner}/${repo}@${branch} ` +
-        `after=${payload.after} changed=${changed.length} removed=${removed.length}`,
+        `before=${payload.before} after=${payload.after} ` +
+        `changed=${changed.length} removed=${removed.length}`,
     );
 
     await this.runIncrementalUpdate(
@@ -502,16 +529,15 @@ export class IndexingService {
       handled: true,
       changed: changed.length,
       removed: removed.length,
+      analysis: {
+        userId: record.indexedByUserId,
+        owner,
+        repo,
+        branch,
+        beforeSha: payload.before ?? '',
+        afterSha: payload.after ?? '',
+        payload,
+      },
     };
-  }
-
-  private isAllowedReviewBranch(branch: string): boolean {
-    const configured =
-      this.config.get<string>('ALLOWED_REVIEW_BRANCHES') ?? 'main,master';
-    const allowed = configured
-      .split(',')
-      .map((b) => b.trim())
-      .filter(Boolean);
-    return allowed.includes(branch);
   }
 }
