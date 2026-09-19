@@ -430,7 +430,8 @@ export class IndexingService {
   }
 
   /**
-   * Connect a workspace branch: full embeddings index + push webhook registration.
+   * Connect a workspace branch: register push webhook first, then index
+   * embeddings only if webhook registration succeeds.
    */
   async connectWorkspace(
     user: AuthenticatedUser,
@@ -440,10 +441,9 @@ export class IndexingService {
     const workspace = `${owner}/${repo}`;
 
     console.log(
-      `${LOG_PREFIX} connect started: ${workspace}@${branch}`,
+      `${LOG_PREFIX} connect started: ${workspace}@${branch} (webhook → index)`,
     );
 
-    const indexResult = await this.runFullIndex(user, owner, repo, branch);
     const webhookResult = await this.registerBranchWebhook(
       user,
       owner,
@@ -451,6 +451,12 @@ export class IndexingService {
       branch,
       webhookUrl,
     );
+
+    console.log(
+      `${LOG_PREFIX} webhook ready: ${workspace} hookId=${webhookResult.webhookId}; starting index`,
+    );
+
+    const indexResult = await this.runFullIndex(user, owner, repo, branch);
 
     return {
       workspace,
@@ -464,8 +470,8 @@ export class IndexingService {
       webhookId: webhookResult.webhookId,
       webhookUrl: webhookResult.webhookUrl,
       message: webhookResult.created
-        ? 'Workspace connected: indexed and webhook registered'
-        : 'Workspace connected: indexed; webhook already present',
+        ? 'Workspace connected: webhook registered and indexed'
+        : 'Workspace connected: webhook already present and indexed',
     };
   }
 

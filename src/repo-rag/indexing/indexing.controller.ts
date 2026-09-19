@@ -23,7 +23,8 @@ export class IndexingController {
   ) {}
 
   /**
-   * Connect a workspace branch: build embeddings + register push webhook.
+   * Connect a workspace branch: register push webhook, then build embeddings
+   * only if webhook registration succeeds.
    * Body: { workspace: "owner/repo", branch } (or owner + repo + branch)
    */
   @UseGuards(JwtAuthGuard)
